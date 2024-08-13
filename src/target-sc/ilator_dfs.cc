@@ -87,6 +87,10 @@ void Ilator::DfsOp(const ExprPtr& expr, StrBuff& buff, ExprVarMap& lut) {
     [[fallthrough]];
   case AstUidExprOp::kImply:
     [[fallthrough]];
+  case AstUidExprOp::kGreaterThan:
+    [[fallthrough]];
+  case AstUidExprOp::kLessThan:
+    [[fallthrough]];
   case AstUidExprOp::kIfThenElse:
     DfsOpSpecial(expr, buff, lut);
     break;
@@ -184,24 +188,35 @@ void Ilator::DfsOpSpecial(const ExprPtr& expr, StrBuff& buff, ExprVarMap& lut) {
   }
   case AstUidExprOp::kExtract: {
     static const char* kExtractTemplate =
-        "auto {extract} = {origin}.range({loc_high}, {loc_low});\n";
+        "sc_biguint<{bitwidth}> {extract} = {origin}.range({loc_high}, {loc_low});\n";
     fmt::format_to(buff, kExtractTemplate, //
+                   fmt::arg("bitwidth", expr->param(0) - expr->param(1) + 1),
                    fmt::arg("extract", local_var),
                    fmt::arg("origin", LookUp(expr->arg(0), lut)),
                    fmt::arg("loc_high", expr->param(0)),
                    fmt::arg("loc_low", expr->param(1)));
     break;
   }
-  case AstUidExprOp::kZeroExtend:
-    [[fallthrough]];
+    case AstUidExprOp::kZeroExtend: {
+    static const char* kZeroExtendTemplate =
+        "{var_type} {extend} = {origin};\n";   
+    auto origin_expr = expr->arg(0);
+    fmt::format_to(buff, kZeroExtendTemplate, //
+                   fmt::arg("var_type", GetCxxType(expr)),
+                   fmt::arg("extend", local_var),
+                   fmt::arg("origin", LookUp(origin_expr, lut)));
+    break;
+  }
   case AstUidExprOp::kSignedExtend: {
-    static const char* kExtendTemplate =
-        "auto {extend} = ({origin}[{sign}] == 1) ? (~{origin}) : {origin};\n"
+    static const char* kSignedExtendTemplate =
+        "{extend_type} {extend} = ({origin}[{sign}] == 1) ? static_cast<{origin_type}>(~{origin}) : {origin};\n"
         "{extend} = ({origin}[{sign}] == 1) ? (~{extend}) : {extend};\n";
     auto origin_expr = expr->arg(0);
-    fmt::format_to(buff, kExtendTemplate, //
+    fmt::format_to(buff, kSignedExtendTemplate, //
+                   fmt::arg("extend_type", GetCxxType(expr)),
                    fmt::arg("extend", local_var),
                    fmt::arg("origin", LookUp(origin_expr, lut)),
+                   fmt::arg("origin_type", GetCxxType(origin_expr)),
                    fmt::arg("sign", origin_expr->sort()->bit_width() - 1));
     break;
   }
@@ -224,6 +239,35 @@ void Ilator::DfsOpSpecial(const ExprPtr& expr, StrBuff& buff, ExprVarMap& lut) {
                    fmt::arg("false_branch", LookUp(expr->arg(2), lut)));
     break;
   }
+
+  case AstUidExprOp::kLessThan: {
+    static const char* kLessThanTemplate =
+      "bool {local_var} = {arg_0}[{sign}] == {arg_1}[{sign}] ? {arg_0} < {arg_1}\n"
+      "                                                   : ({arg_0}[{sign}] == 1 ? true : false);\n";
+
+    auto sign_bit_idx = expr->arg(0)->sort()->bit_width() - 1;
+    fmt::format_to(buff, kLessThanTemplate, 
+                   fmt::arg("local_var", local_var),
+                   fmt::arg("arg_0", LookUp(expr->arg(0), lut)),
+                   fmt::arg("arg_1", LookUp(expr->arg(1), lut)),
+                   fmt::arg("sign", sign_bit_idx));
+
+    break;
+  }
+  case AstUidExprOp::kGreaterThan: {
+    static const char* kGreaterThanTemplate =
+      "bool {local_var} = {arg_0}[{sign}] == {arg_1}[{sign}] ? {arg_0} > {arg_1}\n"
+      "                                                   : ({arg_0}[{sign}] == 0 ? true : false);\n";
+
+    auto sign_bit_idx = expr->arg(0)->sort()->bit_width() - 1;
+    fmt::format_to(buff, kGreaterThanTemplate, 
+                   fmt::arg("local_var", local_var),
+                   fmt::arg("arg_0", LookUp(expr->arg(0), lut)),
+                   fmt::arg("arg_1", LookUp(expr->arg(1), lut)),
+                   fmt::arg("sign", sign_bit_idx));
+
+    break;
+  }
   default:
     ILA_CHECK(false) << expr;
     break;
@@ -237,8 +281,6 @@ static const std::unordered_map<AstUidExprOp, std::string> kOpSymbols = {
     {AstUidExprOp::kComplement, "~"},
     // binary compare
     {AstUidExprOp::kEqual, "=="},
-    {AstUidExprOp::kLessThan, "<"},
-    {AstUidExprOp::kGreaterThan, ">"},
     {AstUidExprOp::kUnsignedLessThan, "<"},
     {AstUidExprOp::kUnsignedGreaterThan, ">"},
     // binary arith
