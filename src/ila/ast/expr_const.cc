@@ -14,21 +14,37 @@ ExprConst::ExprConst(const BoolVal& bool_val) {
   val_ = std::make_shared<BoolVal>(bool_val);
 }
 
+// A BvVal is signed if its most significant bit is one 
+//         and all the more significant bits of the internal representation are
+bool _is_signed(BvValType val, const int& bit_width){
+  return ((val >> (bit_width - 1)) & 1) &&  
+        (val >> bit_width) == ((~0ULL) >> bit_width);
+}
+
 ExprConst::ExprConst(const BvVal& bv_val, const int& bit_width) {
   // bit-width must be positive
   ILA_CHECK(bit_width > 0) << "Non-positive bit-width " << bit_width;
 
+  // Mask out high bits if signed number is detected
+  BvVal to_store = BvVal(-1);
+  if(_is_signed(bv_val.val(), bit_width)){
+    BvValType mask = bit_width == sizeof(BvValType)*8 ? ~static_cast<BvValType>(0) : (static_cast<BvValType>(1) << bit_width) - 1;
+    to_store = BvVal(bv_val.val() & mask);
+  }else{
+    to_store = bv_val;
+  }
+  
   // check bv_val < 2 ^ bit_width
   ILA_CHECK((size_t)bit_width >= BvValTypeBitWidth ||
-            (bv_val.val() >> bit_width) == 0)
-      << bv_val << " width > " << bit_width;
+            ((to_store.val() >> bit_width) == 0)  )
+      << to_store << " width > " << bit_width;
 
   // MAX is UINT64_MAX - cannot tell if it exceed since it's unsigned
   ILA_WARN_IF((size_t)bit_width > BvValTypeBitWidth)
-      << "Define a " << bit_width << "-bit constant " << bv_val;
+      << "Define a " << bit_width << "-bit constant " << to_store;
 
   set_sort(Sort::MakeBvSort(bit_width));
-  val_ = std::make_shared<BvVal>(bv_val);
+  val_ = std::make_shared<BvVal>(to_store);
 }
 
 ExprConst::ExprConst(const MemVal& mem_val, const int& addr_width,
