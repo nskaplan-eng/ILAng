@@ -8,6 +8,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <stdint.h>
 
 /// \namespace ilang
 namespace ilang {
