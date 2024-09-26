@@ -83,6 +83,10 @@ void IlaSim::sim_gen_init(std::string export_dir, bool external_mem,
 
 void IlaSim::sim_gen_init_header() {
   if (!qemu_device_) {
+    std::string token = model_ptr_->name().str()+"_H__";
+    std::transform(token.begin(), token.end(), token.begin(), ::toupper);
+    header_ << header_indent_ << "#ifndef " << token <<  "\n";
+    header_ << header_indent_ << "#define " << token <<  "\n";
     header_ << header_indent_ << "#include \"systemc.h\"\n";
     header_ << header_indent_ << "#include <map>\n";
     header_ << header_indent_ << "#include <fstream>\n";
@@ -255,6 +259,7 @@ void IlaSim::sim_gen_execute_invoke() {
 
   decrease_indent(header_indent_);
   header_ << header_indent_ << "};\n";
+  header_ << header_indent_ << "#endif\n";
 }
 
 void IlaSim::sim_gen_export() {
