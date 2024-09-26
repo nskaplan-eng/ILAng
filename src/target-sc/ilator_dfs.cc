@@ -91,6 +91,8 @@ void Ilator::DfsOp(const ExprPtr& expr, StrBuff& buff, ExprVarMap& lut) {
     [[fallthrough]];
   case AstUidExprOp::kLessThan:
     [[fallthrough]];
+  case AstUidExprOp::kArithShiftRight:
+    [[fallthrough]];
   case AstUidExprOp::kIfThenElse:
     DfsOpSpecial(expr, buff, lut);
     break;
@@ -268,6 +270,20 @@ void Ilator::DfsOpSpecial(const ExprPtr& expr, StrBuff& buff, ExprVarMap& lut) {
 
     break;
   }
+  case AstUidExprOp::kArithShiftRight: {
+    static const char* kArithShiftRightTemplate =
+      "{var_type} {local_var} = {to_shift}[{sign}] == 1 ? ~{to_shift} : {to_shift};\n"
+      "{local_var} = {to_shift}[{sign}] == 1 ? ~({local_var} >> {shift}) :  ({local_var} >> {shift});\n";
+
+    fmt::format_to(buff, kArithShiftRightTemplate, //
+                   fmt::arg("var_type", GetCxxType(expr)),
+                   fmt::arg("local_var", local_var),
+                   fmt::arg("to_shift", LookUp(expr->arg(0), lut)),
+                   fmt::arg("shift", LookUp(expr->arg(1), lut)),
+                   fmt::arg("sign", expr->arg(0)->sort()->bit_width() - 1));
+    break;
+
+  }
   default:
     ILA_CHECK(false) << expr;
     break;
@@ -289,7 +305,6 @@ static const std::unordered_map<AstUidExprOp, std::string> kOpSymbols = {
     {AstUidExprOp::kXor, "^"},
     {AstUidExprOp::kShiftLeft, "<<"},
     {AstUidExprOp::kLogicShiftRight, ">>"},
-    {AstUidExprOp::kArithShiftRight, ">>"},
     {AstUidExprOp::kAdd, "+"},
     {AstUidExprOp::kSubtract, "-"},
     {AstUidExprOp::kMultiply, "*"},
